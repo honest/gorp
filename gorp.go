@@ -17,12 +17,12 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
 	"time"
-	"log"
-	"os"
 )
 
 // Oracle String (empty string is null)
@@ -1457,7 +1457,11 @@ func SelectOne(m *DbMap, e SqlExecutor, holder interface{}, query string, args .
 			return sql.ErrNoRows
 		}
 
-		return nonFatalErr
+		if nonFatalErr != nil {
+			log.Printf("Ignored non fatal error: %s", nonFatalErr.Error())
+		}
+		return nil
+		// return nonFatalErr
 	}
 
 	return selectVal(e, holder, query, args...)
@@ -1521,7 +1525,11 @@ func hookedselect(m *DbMap, exec SqlExecutor, i interface{}, query string,
 			}
 		}
 	}
-	return list, nonFatalErr
+	if nonFatalErr != nil {
+		log.Printf("Ignored non fatal error: %s", nonFatalErr.Error())
+	}
+	return list, nil
+	// return list, nonFatalErr
 }
 
 func rawselect(m *DbMap, exec SqlExecutor, i interface{}, query string,
@@ -1658,7 +1666,11 @@ func rawselect(m *DbMap, exec SqlExecutor, i interface{}, query string,
 		sliceValue.Set(reflect.MakeSlice(sliceValue.Type(), 0, 0))
 	}
 
-	return list, nonFatalErr
+	if nonFatalErr != nil {
+		log.Printf("Ignored non fatal error: %s", nonFatalErr.Error())
+	}
+	return list, nil
+	// return list, nonFatalErr
 }
 
 // maybeExpandNamedQuery checks the given arg to see if it's eligible to be used
