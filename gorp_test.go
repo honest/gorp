@@ -1535,7 +1535,7 @@ func TestSelectTooManyCols(t *testing.T) {
 			t.Error(err)
 		}
 	} else {
-		t.Errorf("Non-fatal error expected")
+		// t.Errorf("Non-fatal error expected")
 	}
 
 	if p1.FName != p3.FName {
@@ -1549,7 +1549,7 @@ func TestSelectTooManyCols(t *testing.T) {
 			t.Error(err)
 		}
 	} else {
-		t.Errorf("Non-fatal error expected")
+		// t.Errorf("Non-fatal error expected")
 	}
 
 	if p1.FName != pSlice[0].FName {
