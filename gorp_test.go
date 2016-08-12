@@ -6,10 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
-	_ "github.com/mattn/go-sqlite3"
-	_ "github.com/ziutek/mymysql/godrv"
 	"log"
 	"math/rand"
 	"os"
@@ -17,6 +13,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
+	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/ziutek/mymysql/godrv"
 )
 
 // verify interface compliance
@@ -1124,6 +1125,29 @@ func TestWithIgnoredColumn(t *testing.T) {
 	}
 	if _get(dbmap, WithIgnoredColumn{}, ic.Id) != nil {
 		t.Errorf("Found id: %d after Delete()", ic.Id)
+	}
+}
+
+func TestColumnFilterNoUpdate(t *testing.T) {
+	dbmap := initDbMap()
+	defer dropAndClose(dbmap)
+
+	inv1 := &Invoice{0, 100, 200, "a", 0, false}
+	_insert(dbmap, inv1)
+
+	inv1.Memo = "c"
+	inv1.IsPaid = true
+	_updateColumns(dbmap, func(col *ColumnMap) bool {
+		return false
+	}, inv1)
+
+	inv2 := &Invoice{}
+	inv2 = _get(dbmap, inv2, inv1.Id).(*Invoice)
+	if inv2.Memo != "a" {
+		t.Error("Memo shouldn't have be updated")
+	}
+	if inv2.IsPaid {
+		t.Error("IsPaid shouldn't have been updated")
 	}
 }
 

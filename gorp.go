@@ -435,6 +435,10 @@ func (t *TableMap) bindUpdate(elem reflect.Value, colFilter ColumnFilter) (bindI
 			}
 		}
 
+		if x == 0 {
+			return bindInstance{}, &NoFieldUpdateError{}
+		}
+
 		s.WriteString(" where ")
 		for y := range t.keys {
 			col := t.keys[y]
@@ -1982,6 +1986,10 @@ func update(m *DbMap, exec SqlExecutor, colFilter ColumnFilter, list ...interfac
 
 		bi, err := table.bindUpdate(elem, colFilter)
 		if err != nil {
+			if NonFatalError(err) {
+				log.Printf("Ignored non fatal error: %s", err.Error())
+				return 0, nil
+			}
 			return -1, err
 		}
 
