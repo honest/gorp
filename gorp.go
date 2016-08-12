@@ -135,6 +135,13 @@ type CustomScanner struct {
 	Binder func(holder interface{}, target interface{}) error
 }
 
+// Used to filter columns when selectively updating
+type ColumnFilter func(*ColumnMap) bool
+
+func acceptAllFilter(col *ColumnMap) bool {
+	return true
+}
+
 // Bind is called automatically by gorp after Scan()
 func (me CustomScanner) Bind() error {
 	return me.Binder(me.Holder, me.Target)
@@ -396,7 +403,11 @@ func (t *TableMap) bindInsert(elem reflect.Value) (bindInstance, error) {
 	return plan.createBindInstance(elem, t.dbmap.TypeConverter)
 }
 
-func (t *TableMap) bindUpdate(elem reflect.Value) (bindInstance, error) {
+func (t *TableMap) bindUpdate(elem reflect.Value, colFilter ColumnFilter) (bindInstance, error) {
+	if colFilter == nil {
+		colFilter = acceptAllFilter
+	}
+
 	plan := t.updatePlan
 	if plan.query == "" {
 
@@ -406,7 +417,7 @@ func (t *TableMap) bindUpdate(elem reflect.Value) (bindInstance, error) {
 
 		for y := range t.Columns {
 			col := t.Columns[y]
-			if !col.isAutoIncr && !col.Transient {
+			if !col.isAutoIncr && !col.Transient && colFilter(col) {
 				if x > 0 {
 					s.WriteString(", ")
 				}
@@ -422,6 +433,10 @@ func (t *TableMap) bindUpdate(elem reflect.Value) (bindInstance, error) {
 				}
 				x++
 			}
+		}
+
+		if x == 0 {
+			return bindInstance{}, &NoFieldUpdateError{}
 		}
 
 		s.WriteString(" where ")
@@ -984,7 +999,23 @@ func (m *DbMap) Insert(list ...interface{}) error {
 // Returns an error if SetKeys has not been called on the TableMap
 // Panics if any interface in the list has not been registered with AddTable
 func (m *DbMap) Update(list ...interface{}) (int64, error) {
-	return update(m, m, list...)
+	return update(m, m, nil, list...)
+}
+
+// UpdateColumns runs a SQL UPDATE statement for each element in list.  List
+// items must be pointers.
+//
+// Only the columns accepted by filter are included in the UPDATE.
+//
+// The hook functions PreUpdate() and/or PostUpdate() will be executed
+// before/after the UPDATE statement if the interface defines them.
+//
+// Returns the number of rows updated.
+//
+// Returns an error if SetKeys has not been called on the TableMap
+// Panics if any interface in the list has not been registered with AddTable
+func (m *DbMap) UpdateColumns(filter ColumnFilter, list ...interface{}) (int64, error) {
+	return update(m, m, filter, list...)
 }
 
 // Delete runs a SQL DELETE statement for each element in list.  List
@@ -1198,7 +1229,12 @@ func (t *Transaction) Insert(list ...interface{}) error {
 
 // Update had the same behavior as DbMap.Update(), but runs in a transaction.
 func (t *Transaction) Update(list ...interface{}) (int64, error) {
-	return update(t.dbmap, t, list...)
+	return update(t.dbmap, t, nil, list...)
+}
+
+// UpdateColumns had the same behavior as DbMap.UpdateColumns(), but runs in a transaction.
+func (t *Transaction) UpdateColumns(filter ColumnFilter, list ...interface{}) (int64, error) {
+	return update(t.dbmap, t, filter, list...)
 }
 
 // Delete has the same behavior as DbMap.Delete(), but runs in a transaction.
@@ -1932,7 +1968,7 @@ func delete(m *DbMap, exec SqlExecutor, list ...interface{}) (int64, error) {
 	return count, nil
 }
 
-func update(m *DbMap, exec SqlExecutor, list ...interface{}) (int64, error) {
+func update(m *DbMap, exec SqlExecutor, colFilter ColumnFilter, list ...interface{}) (int64, error) {
 	count := int64(0)
 	for _, ptr := range list {
 		table, elem, err := m.tableForPointer(ptr, true)
@@ -1948,8 +1984,12 @@ func update(m *DbMap, exec SqlExecutor, list ...interface{}) (int64, error) {
 			}
 		}
 
-		bi, err := table.bindUpdate(elem)
+		bi, err := table.bindUpdate(elem, colFilter)
 		if err != nil {
+			if NonFatalError(err) {
+				log.Printf("Ignored non fatal error: %s", err.Error())
+				return 0, nil
+			}
 			return -1, err
 		}
 
